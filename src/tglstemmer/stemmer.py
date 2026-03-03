@@ -1,6 +1,4 @@
-"""This module provides functions to perform Tagalog stemming on word/s.
-"""
-
+"""This module provides functions to perform Tagalog stemming on word/s."""
 
 import os
 from tabulate import tabulate
@@ -24,7 +22,9 @@ valid_words = get_words()
 valid_words.extend(["split"])
 
 
-def get_stems(text: str, valid_words: Optional[list[str]] = valid_words, exclude_punc: bool=True) -> list[str]:
+def get_stems(
+    text: str, valid_words: Optional[list[str]] = valid_words, exclude_punc: bool = True
+) -> list[str]:
     """Get the stem of each word in a text.
 
     Args:
@@ -80,7 +80,9 @@ def get_stem(token: str, valid_words: Optional[list[str]] = valid_words) -> Stem
         return sort_candidates(candidates)[0]
 
 
-def get_stem_candidates(token: str, valid_words: Optional[list[str]] = valid_words) -> list[Stem]:
+def get_stem_candidates(
+    token: str, valid_words: Optional[list[str]] = valid_words
+) -> list[Stem]:
     """Get the possible stems of a word.
 
     Args:
@@ -128,7 +130,11 @@ def sort_candidates(candidates: list[Stem]) -> list[Stem]:
     Returns:
         list[Stem]: Ordered list of the stem candidates.
     """
-    return sorted(candidates, key=lambda c: c.count_affixes() + c.count_reduplication(), reverse=True)
+    return sorted(
+        candidates,
+        key=lambda c: c.count_affixes() + c.count_reduplication(),
+        reverse=True,
+    )
 
 
 def apply_stemming(
@@ -176,7 +182,9 @@ def stem_pre(tokens: set[Stem]) -> set[Stem]:
                 stems.add(stem)
 
                 # Phoneme change (d/r) (e.g. parami => dami)
-                if stem[0] == "r" and is_vowel(prefix[-1], stem[1]):
+                if stem[0] == "r" and (
+                    len(stem) >= 2 and is_vowel(prefix[-1], stem[1])
+                ):
                     stem_phch_dr = "d" + stem[1:]
                     stem_phch_dr.phoneme_change = "pre: d/r"
                     stems.add(stem_phch_dr)
@@ -307,7 +315,9 @@ def stem_inf(tokens: set[Stem]) -> set[Stem]:
     return stems
 
 
-def stem_suf(tokens: set[Stem], valid_words: Optional[list[str]] = valid_words) -> set[Stem]:
+def stem_suf(
+    tokens: set[Stem], valid_words: Optional[list[str]] = valid_words
+) -> set[Stem]:
     """Stems tokens with suffixes.
 
     Args:
@@ -381,9 +391,7 @@ def stem_suf(tokens: set[Stem], valid_words: Optional[list[str]] = valid_words) 
                     if is_valid(stem_mtts, valid_words):
                         stems.add(stem_mtts)
 
-                    elif stems_vwls_mtts := stem_vowel_loss(
-                        {stem_mtts}, valid_words
-                    ):
+                    elif stems_vwls_mtts := stem_vowel_loss({stem_mtts}, valid_words):
                         stems.update(stems_vwls_mtts)
 
     return stems
