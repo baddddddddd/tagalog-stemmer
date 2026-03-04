@@ -321,69 +321,83 @@ def stem_suf(
     """
     stems = set()
 
+    CONTRACTIONS = set(["ng", "g", "'t", "'y"])
     for token in tokens:
         for suffix in SUFFIXES:
-            if token.endswith(suffix) and len(token) > len(suffix):
-                stem = token[0 : len(token) - len(suffix)]
-                if suffix in ("ng", "g", "'t", "'y"):
-                    # 'g' contraction
-                    if suffix == "g" and stem[-1] != "n":
-                        continue
+            if len(token) <= len(suffix) or not token.endswith(suffix):
+                continue
 
-                    # "'t" or "'y" contraction
-                    if suffix in ("'t", "'y") and not is_vowel(stem[-1]):
-                        continue
+            stem = token[: -len(suffix)]
 
-                    stem.contraction = suffix
-                else:
-                    stem.suf = suffix
+            # contractions
+            if len(suffix) <= 2 and suffix in CONTRACTIONS:
+                # 'g' contraction
+                if suffix == "g" and stem[-1] != "n":
+                    continue
 
-                stems.add(stem)
+                # "'t" or "'y" contraction
+                if not is_vowel(stem[-1]) and suffix in ("'t", "'y"):
+                    continue
 
-                # Phoneme change (d/r) (e.g. bayaran => bayad)
-                if suffix in ("in", "an") and stem[-1] == "r":
-                    stem_phch_dr = replace_letter(stem, -1, "d")
-                    stem_phch_dr.phoneme_change = "suf: d/r"
-                    stems.add(stem_phch_dr)
+                stem.contraction = suffix
+            else:
+                stem.suf = suffix
 
-                # Phoneme change (o/u)
-                # (e.g. tauhan => tao)
-                if len(stem) > 1 and stem[-1] == "u":
-                    stem_phch_ou = replace_letter(stem, -1, "o")
-                    stem_phch_ou.phoneme_change = "suf: o/u"
-                    stems.add(stem_phch_ou)
-                # (e.g. inuman => inom)
-                elif len(stem) > 2 and stem[-2] == "u":
-                    stem_phch_ou = replace_letter(stem, -2, "o")
-                    stem_phch_ou.phoneme_change = "suf: o/u"
-                    stems.add(stem_phch_ou)
+            stems.add(stem)
 
-                # Phoneme change (e/i)
-                # (e.g. kingkihan => kingke)
-                if len(stem) > 1 and stem[-1] == "i":
-                    stem_phch_ei = replace_letter(stem, -1, "e")
-                    stem_phch_ei.phoneme_change = "suf: e/i"
-                    stems.add(stem_phch_ei)
-                # (e.g. paitin => paet)
-                elif len(stem) > 2 and stem[-2] == "i":
-                    stem_phch_ei = replace_letter(stem, -2, "e")
-                    stem_phch_ei.phoneme_change = "suf: e/i"
-                    stems.add(stem_phch_ei)
+            # Phoneme change (d/r) (e.g. bayaran => bayad)
+            if stem[-1] == "r" and suffix in ("in", "an"):
+                stem_phch_dr = stem[:-1] + "d"
+                stem_phch_dr.phoneme_change = "suf: d/r"
+                stems.add(stem_phch_dr)
 
-                if len(stem) > 2 and is_acceptable(stem) and is_consonant(stem[-2:]):
-                    # Vowel loss (e.g. buksan => bukas)
-                    if stems_vwls := stem_vowel_loss({stem}, valid_words):
-                        stems.update(stems_vwls)
+            # Phoneme change (o/u)
+            # (e.g. tauhan => tao)
+            if len(stem) > 1 and stem[-1] == "u":
+                stem_phch_ou = stem[:-1] + "o"
+                stem_phch_ou.phoneme_change = "suf: o/u"
+                stems.add(stem_phch_ou)
 
-                    # Metathesis (e.g. tamnin => tanim)
-                    stem_mtts = swap_letters(stem, -1, -2)
-                    stem_mtts.metathesis = True
+            # (e.g. inuman => inom)
+            elif len(stem) > 2 and stem[-2] == "u":
+                stem_phch_ou = stem[:-2] + "o" + stem[-1]
+                stem_phch_ou.phoneme_change = "suf: o/u"
+                stems.add(stem_phch_ou)
 
-                    if is_valid(stem_mtts, valid_words):
-                        stems.add(stem_mtts)
+            # Phoneme change (e/i)
+            # (e.g. kingkihan => kingke)
+            if len(stem) > 1 and stem[-1] == "i":
+                stem_phch_ei = stem[:-1] + "e"
+                stem_phch_ei.phoneme_change = "suf: e/i"
+                stems.add(stem_phch_ei)
 
-                    elif stems_vwls_mtts := stem_vowel_loss({stem_mtts}, valid_words):
-                        stems.update(stems_vwls_mtts)
+            # (e.g. paitin => paet)
+            elif len(stem) > 2 and stem[-2] == "i":
+                stem_phch_ei = stem[:-2] + "e" + stem[-1]
+                stem_phch_ei.phoneme_change = "suf: e/i"
+                stems.add(stem_phch_ei)
+
+            if (
+                len(stem) < 3
+                or not is_consonant(stem[-1])
+                or not is_consonant(stem[-2])
+                or not is_acceptable(stem)
+            ):
+                continue
+
+            # Vowel loss (e.g. buksan => bukas)
+            if stems_vwls := stem_vowel_loss({stem}, valid_words):
+                stems.update(stems_vwls)
+
+            # Metathesis (e.g. tamnin => tanim)
+            stem_mtts = swap_letters(stem, -1, -2)
+            stem_mtts.metathesis = True
+
+            if is_valid(stem_mtts, valid_words):
+                stems.add(stem_mtts)
+
+            elif stems_vwls_mtts := stem_vowel_loss({stem_mtts}, valid_words):
+                stems.update(stems_vwls_mtts)
 
     return stems
 
@@ -412,7 +426,7 @@ def stem_vowel_loss(
                     stems.add(valid_stem)
 
             if len(token) > 2:
-                stem = token[0:-1] + vowel + token[-1]
+                stem = token[:-1] + vowel + token[-1]
                 if valid_stem := is_valid(stem, valid_words):
                     valid_stem.vowel_loss = vowel
                     stems.add(valid_stem)
