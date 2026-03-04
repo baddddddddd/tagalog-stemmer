@@ -458,84 +458,85 @@ def stem_rep(tokens: set[Stem]) -> set[Stem]:
             stem = token[2:]
             stem.rep = str(token[:2])
 
-        # Starts with a 2-consonant cluster
-        elif len(token) > 5:
-            # Repeats first consonant and vowel (CV-CCV) (e.g. cecheck)
-            if (
-                token[0] == token[2]
-                and token[1] == token[4]
-                and is_consonant(token[0])
-                and is_vowel(token[1])
-            ):
-                stem = token[2:]
-                stem.rep = str(token[:2])
+        # NOTE: These are for taglish words, so nope for now
+        # # Starts with a 2-consonant cluster
+        # elif len(token) > 5:
+        #     # Repeats first consonant and vowel (CV-CCV) (e.g. cecheck)
+        #     if (
+        #         token[0] == token[2]
+        #         and token[1] == token[4]
+        #         and is_consonant(token[0])
+        #         and is_vowel(token[1])
+        #     ):
+        #         stem = token[2:]
+        #         stem.rep = str(token[:2])
 
-            # Repeats all consonants (CC-CCV) (e.g. chcheck => check)
-            elif (
-                token[0:2] == token[2:4]
-                and is_consonant(token[0:2])
-                and is_vowel(token[4])
-            ):
-                stem = token[2:]
-                stem.rep = str(token[:2])
+        #     # Repeats all consonants (CC-CCV) (e.g. chcheck => check)
+        #     elif (
+        #         token[0:2] == token[2:4]
+        #         and is_consonant(token[0:2])
+        #         and is_vowel(token[4])
+        #     ):
+        #         stem = token[2:]
+        #         stem.rep = str(token[:2])
 
-            # Repeats all consonants and vowel (CCV-CCV) (e.g. checheck => check)
-            elif (
-                token[0:2] == token[3:5]
-                and is_consonant(token[0:2])
-                and is_vowel(token[2])
-            ):
-                stem = token[3:]
-                stem.rep = str(token[:3])
+        #     # Repeats all consonants and vowel (CCV-CCV) (e.g. checheck => check)
+        #     elif (
+        #         token[0:2] == token[3:5]
+        #         and is_consonant(token[0:2])
+        #         and is_vowel(token[2])
+        #     ):
+        #         stem = token[3:]
+        #         stem.rep = str(token[:3])
 
-        # Starts with a 3-consonant cluster
-        if len(token) > 6:
-            # Repeats first consonant and vowel (CV-CCCV) (e.g. sisplit => split)
-            if (
-                token[0] == token[2]
-                and token[1] == token[5]
-                and is_consonant(token[0])
-                and is_vowel(token[1])
-            ):
-                stem = token[2:]
-                stem.rep = str(token[:2])
+        # # Starts with a 3-consonant cluster
+        # if len(token) > 6:
+        #     # Repeats first consonant and vowel (CV-CCCV) (e.g. sisplit => split)
+        #     if (
+        #         token[0] == token[2]
+        #         and token[1] == token[5]
+        #         and is_consonant(token[0])
+        #         and is_vowel(token[1])
+        #     ):
+        #         stem = token[2:]
+        #         stem.rep = str(token[:2])
 
-            # Repeats first two consonants (CC-CCCV) (e.g. spsplit => split)
-            elif (
-                token[0:2] == token[2:4]
-                and is_consonant(token[0:2])
-                and is_vowel(token[5])
-            ):
-                stem = token[2:]
-                stem.rep = str(token[:2])
+        #     # Repeats first two consonants (CC-CCCV) (e.g. spsplit => split)
+        #     elif (
+        #         token[0:2] == token[2:4]
+        #         and is_consonant(token[0:2])
+        #         and is_vowel(token[5])
+        #     ):
+        #         stem = token[2:]
+        #         stem.rep = str(token[:2])
 
-            # Repeats first two consonants and vowel (CCV-CCCV) (e.g. spisplit => split)
-            elif (
-                token[0:2] == token[3:5]
-                and token[2] == token[6]
-                and is_consonant(token[0:2])
-                and is_vowel(token[6])
-            ):
-                stem = token[3:]
-                stem.rep = str(token[:3])
+        #     # Repeats first two consonants and vowel (CCV-CCCV) (e.g. spisplit => split)
+        #     elif (
+        #         token[0:2] == token[3:5]
+        #         and token[2] == token[6]
+        #         and is_consonant(token[0:2])
+        #         and is_vowel(token[6])
+        #     ):
+        #         stem = token[3:]
+        #         stem.rep = str(token[:3])
 
-            # Repeats all consonants (CCC-CCCV) (e.g. splsplit => split)
-            elif (
-                token[0:3] == token[3:6]
-                and is_consonant(token[0:3])
-                and is_vowel(token[6])
-            ):
-                stem = token[3:]
-                stem.rep = str(token[:3])
+        #     # Repeats all consonants (CCC-CCCV) (e.g. splsplit => split)
+        #     elif (
+        #         token[0:3] == token[3:6]
+        #         and is_consonant(token[0:3])
+        #         and is_vowel(token[6])
+        #     ):
+        #         stem = token[3:]
+        #         stem.rep = str(token[:3])
 
-            # Repeats all consonants and vowel (CCCV-CCCV) (e.g. splisplit => split)
-            elif (
-                token[0:4] == token[4:8]
-                and is_consonant(token[0:3])
-                and is_vowel(token[3])
-            ):
-                stem = token[4:]
-                stem.rep = str(token[:4])
+        #     # Repeats all consonants and vowel (CCCV-CCCV) (e.g. splisplit => split)
+        #     elif (
+        #         token[0:4] == token[4:8]
+        #         and is_consonant(token[0:3])
+        #         and is_vowel(token[3])
+        #     ):
+        #         stem = token[4:]
+        #         stem.rep = str(token[:4])
 
         if stem:
             stems.add(stem)

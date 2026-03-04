@@ -38,7 +38,7 @@ def is_acceptable(token):
     return False
 
 
-def is_vowel(char):
+def is_vowel(s):
     """Checks if a substring is a consonant.
 
     Args:
@@ -47,10 +47,10 @@ def is_vowel(char):
     Returns:
         bool: True if substring is consonant, False otherwise.
     """
-    return char in VOWELS
+    return all([c in VOWELS for c in s])
 
 
-def is_consonant(char):
+def is_consonant(s):
     """Checks if a substring is a consonant.
 
     Args:
@@ -59,4 +59,4 @@ def is_consonant(char):
     Returns:
         bool: True if substring is consonant, False otherwise.
     """
-    return char in CONSONANTS
+    return all([c in CONSONANTS for c in s])
