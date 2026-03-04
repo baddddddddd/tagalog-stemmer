@@ -64,25 +64,20 @@ def get_stem(token: str, valid_words: Optional[list[str]] = valid_words) -> Stem
     """
     token = Stem(token.strip().lower())
 
-    candidates = list(get_stem_candidates(token, valid_words))
+    candidates = get_stem_candidates(token, valid_words)
 
-    # Filter out original token
-    candidates = [c for c in candidates if c != token]
+    # Filter out original token using its length
+    candidates = [c for c in candidates if len(c) != len(token)]
     if not candidates:
         return token
 
-    # Filter out candidates with transformations and contractions
-    no_transformations = [c for c in candidates if c.count_transformations() == 0]
-    no_contractions = [c for c in candidates if not c.contraction]
+    # # Filter out candidates with transformations and contractions
+    # no_transformations = [c for c in candidates if c.count_transformations() == 0]
+    # no_contractions = [c for c in candidates if not c.contraction]
+    # no_tran_cont = list(set(no_transformations) & set(no_contractions))
 
-    if no_tran_cont := list(set(no_transformations) & set(no_contractions)):
-        return sort_candidates(no_tran_cont)[0]
-    elif no_contractions:
-        return sort_candidates(no_contractions)[0]
-    elif no_transformations:
-        return sort_candidates(no_transformations)[0]
-    else:
-        return sort_candidates(candidates)[0]
+    candidates = sort_candidates(candidates)
+    return candidates[0]
 
 
 def get_stem_candidates(
@@ -120,7 +115,7 @@ def get_stem_candidates(
 
     candidates = [stem for stem in stems if is_valid(stem, valid_words)]
     if candidates:
-        return sort_candidates(candidates)
+        return candidates
     else:
         return [token]
 
@@ -136,8 +131,9 @@ def sort_candidates(candidates: list[Stem]) -> list[Stem]:
     """
     return sorted(
         candidates,
-        key=lambda c: c.count_affixes() + c.count_reduplication(),
-        reverse=True,
+        key=lambda c: c.get_sorting_key(),
+        # key=lambda c: c.count_affixes() + c.count_reduplication(),
+        # reverse=True,
     )
 
 
@@ -156,7 +152,7 @@ def apply_stemming(
         set[Stem]: A set of stemming attempts for each token.
     """
     for f in functions:
-        if f in [stem_suf]:
+        if f == stem_suf:
             tokens.update(f(tokens, valid_words))
         else:
             tokens.update(f(tokens))

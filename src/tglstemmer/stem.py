@@ -1,6 +1,4 @@
-"""This module provides a class to store Tagalog stems.
-"""
-
+"""This module provides a class to store Tagalog stems."""
 
 from typing import Optional
 
@@ -51,30 +49,35 @@ class Stem(str):
         self.metathesis = metathesis
 
     def count_affixes(self):
-        """Counts the length of affixes.
-        """
+        """Counts the length of affixes."""
         return (
             len(self.pre or "")
             + len(self.inf or "")
             + len(self.suf or "")
+            + len(self.contraction or "")
         )
 
     def count_reduplication(self):
-        """Counts the length of reduplication (repetition and duplication).
-        """
-        return (
-            len(self.rep or "")
-            + len(self.dup or "")
-        )
+        """Counts the length of reduplication (repetition and duplication)."""
+        return len(self.rep or "") + len(self.dup or "")
 
     def count_transformations(self):
-        """Counts the number of transformations.
-        """
+        """Counts the number of transformations."""
         return (
             int(bool(self.phoneme_change))
             + int(bool(self.assimilation))
             + int(bool(self.vowel_loss))
             + int(bool(self.metathesis))
+        )
+
+    def get_sorting_key(self):
+        return (
+            bool(self.metathesis),
+            bool(self.vowel_loss),
+            bool(self.assimilation),
+            bool(self.phoneme_change),
+            -self.count_reduplication(),
+            -self.count_affixes(),
         )
 
     # Override str methods
