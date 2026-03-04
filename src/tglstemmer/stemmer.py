@@ -554,99 +554,57 @@ def stem_dup(tokens: set[Stem]) -> set[Stem]:
     stems = set()
 
     for token in tokens:
+        # check if token has exactly one hyphen
+        arr = token.split("-")
+        if len(arr) != 2:
+            continue
 
-        if (
-            "-" in token
-            and "-" not in (token[0], token[-1])
-            and len(token.split("-")) == 2
-        ):
+        first, second = arr
+        first_len = len(first)
+        second_len = len(second)
+        if first_len <= 1 or second_len <= 1 or first_len < second_len:
+            continue
 
-            first, second = token.split("-")
+        len_diff = first_len - second_len
+        if len_diff > 2:
+            continue
 
-            if len(first) > 1 and len(second) > 1:
+        # 2-char contraction
+        contraction = None
+        LEN2_CONTRACTIONS = ("ng", "'t")
+        if len_diff == 2:
+            end = first[-2:]
+            if end not in LEN2_CONTRACTIONS:
+                continue
 
-                # Exact match (e.g. ano-ano => ano)
-                if first == second:
-                    stem = first
-                    stem.dup = str(first)
-                    stems.add(stem)
+            first = first[:-2]
+            contraction = end
 
-                # Repeat first 2 syllables for >3-syllable words (e.g. panga-pangako => pangako)
-                elif len(first) > 2 and len(second) > 4 and second.startswith(first):
-                    stem = second
-                    stem.dup = str(first)
-                    stems.add(stem)
+        # 1-char contraction
+        LEN1_CONTRACTION = "t"
+        if len_diff == 1:
+            end = first[-1]
+            if end != LEN1_CONTRACTION:
+                continue
 
-                # Phoneme change (o/u) (e.g. anu-ano => ano)
-                elif (
-                    len(first) > 2
-                    and first[-1] == "u"
-                    and replace_letter(first, -1, "o") == second
-                    or first[-2] == "u"
-                    and replace_letter(first, -2, "o") == second
-                ):
-                    stem = second
-                    stem.dup = str(second)
-                    stem.phoneme_change = "dup: o/u"
-                    stems.add(stem)
+            first = first[:-1]
+            contraction = "'t"
 
-                # Contractions on first part
+        # phoneme change (o/u) (e.g. anu-ano => ano)
+        phoneme_change = None
+        if first[-1] == "u" and second[-1] == "o":
+            first = first[:-1] + "o"
+            phoneme_change = "dup: o/u"
 
-                # 2-character contractions
-                elif len(first) > 3 and first[-2:] in ("ng", "'t"):
+        # Exact match (e.g. ano-ano => ano)
+        if first != second:
+            continue
 
-                    # Exact match after contraction removal (e.g. iba't-iba => iba)
-                    if first[:-2] == second:
-                        stem = second
-                        stem.dup = str(second)
-                        stem.contraction = first[-2:]
-                        stems.add(stem)
-
-                    else:
-                        # Phoneme change (o/u) (e.g. larung-laro => laro)
-                        if first[-3] == "u" and first[0:-3] + "o" == second:
-                            stem = second
-                            stem.dup = str(second)
-                            stem.contraction = first[-2:]
-                            stems.add(stem)
-
-                        # Token ends with 'n' with 'ng' contraction
-                        elif first[-2:] == "ng":
-                            # (e.g. ating-atin => atin)
-                            if first[:-1] == second:
-                                stem = second
-                                stem.dup = str(second)
-                                stem.contraction = first[-1]
-                                stems.add(stem)
-
-                            # (e.g. hapung-hapon => hapon)
-                            elif (
-                                first[-3] == "u"
-                                and replace_letter(first[:-1], -2, "o") == second
-                            ):
-                                stem = second
-                                stem.dup = str(second)
-                                stem.contraction = first[-1]
-                                stem.phoneme_change = "dup: o/u"
-                                stems.add(stem)
-
-                # 1-character contractions
-                elif len(first) > 2 and first[-1] in ("t"):
-
-                    # Exact match after contraction removal (e.g. ibat-iba => iba)
-                    if first[:-1] == second:
-                        stem = second
-                        stem.dup = str(second)
-                        stem.contraction = first[-1]
-                        stems.add(stem)
-
-                    # Phoneme change (o/u) (e.g. libut-libo => libo)
-                    elif first[-2] == "u" and first[0:-2] + "o" == second:
-                        stem = second
-                        stem.dup = str(second)
-                        stem.contraction = first[-1]
-                        stem.phoneme_change = "dup: o/u"
-                        stems.add(stem)
+        stem = first
+        stem.dup = first
+        stem.contraction = contraction
+        stem.phoneme_change = phoneme_change
+        stems.add(stem)
 
     return stems
 
