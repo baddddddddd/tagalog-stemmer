@@ -176,91 +176,80 @@ def stem_pre(tokens: set[Stem]) -> set[Stem]:
 
     for token in tokens:
         for prefix in PREFIXES:
-            if token.startswith(prefix) and len(token) > len(prefix):
-                stem = token[len(prefix) :]
-                stem.pre = prefix
+            if len(token) <= len(prefix) or not token.startswith(prefix):
+                continue
 
-                if stem[0] == "-":
-                    stem = stem[1:]
+            stem = token[len(prefix) :]
+            stem.pre = prefix
 
-                stems.add(stem)
+            if stem[0] == "-":
+                stem = stem[1:]
 
-                # Phoneme change (d/r) (e.g. parami => dami)
-                if stem[0] == "r" and (
-                    len(stem) >= 2 and is_vowel(prefix[-1], stem[1])
-                ):
-                    stem_phch_dr = "d" + stem[1:]
-                    stem_phch_dr.phoneme_change = "pre: d/r"
-                    stems.add(stem_phch_dr)
+            if len(stem) <= 1:
+                continue
 
-                # Assimilation
-                if is_acceptable(stem) and is_vowel(stem[0]):
-                    # -ng: k/null (e.g. pangailangan => kailangan)
-                    if prefix.endswith("ng"):
-                        stem_asml_knull = "k" + stem
-                        stem_asml_knull.assimilation = "k/null"
-                        stems.add(stem_asml_knull)
+            stems.add(stem)
 
-                        # '-ng' repetition
-                        if (
-                            len(stem) > 3
-                            and stem[1:3] == "ng"
-                            and stem[0] == stem[3]
-                            and is_vowel(stem[0])
-                        ):
-                            # (e.g. pangingisda => isda)
-                            stem_ng_rep = stem[3:]
-                            stem_ng_rep.rep = str(stem[:3])
-                            stems.add(stem_ng_rep)
+            # Phoneme change (d/r) (e.g. parami => dami)
+            if stem[0] == "r" and is_vowel(stem[1]) and is_vowel(prefix[-1]):
+                stem_phch_dr = "d" + stem[1:]
+                stem_phch_dr.phoneme_change = "pre: d/r"
+                stems.add(stem_phch_dr)
 
-                            if is_acceptable(stem_ng_rep):
-                                # Assimilation (k/null) (e.g. pangangailangan => kailangan)
-                                stem_ng_rep_asml = "k" + stem_ng_rep
-                                stem_ng_rep_asml.assimilation = "k/null"
-                                stems.add(stem_ng_rep_asml)
+            if not is_vowel(stem[0]) or not is_acceptable(stem):
+                continue
 
-                    # -m: b/p (e.g. pamigay = bigay, pamagitan => pagitan)
-                    elif prefix.endswith("m"):
-                        for l in "bp":
-                            stem_asml_bp = l + stem
-                            stem_asml_bp.assimilation = "b/p: " + l
-                            stems.add(stem_asml_bp)
+            # Assimilation
+            # -ng: k/null (e.g. pangailangan => kailangan)
+            if prefix.endswith("ng"):
+                stem_asml_knull = "k" + stem
+                stem_asml_knull.assimilation = "k/null"
+                stems.add(stem_asml_knull)
 
-                        # '-m' repetition
-                        if (
-                            len(stem) > 2
-                            and stem[1] == "m"
-                            and stem[0] == stem[2]
-                            and is_vowel(stem[0])
-                        ):
-                            # Assimilation (b/p)
-                            # (e.g. pamimigay => bigay, pamamagitan => pagitan)
-                            for l in "bp":
-                                stem_m_rep_asml = l + stem[2:]
-                                stem_m_rep_asml.assimilation = "b/p: " + l
-                                stems.add(stem_m_rep_asml)
+                # '-ng' repetition
+                if len(stem) >= 4 and stem[1:3] == "ng" and stem[0] == stem[3]:
+                    # (e.g. pangingisda => isda)
+                    stem_ng_rep = stem[3:]
+                    stem_ng_rep.rep = stem[:3]
+                    stems.add(stem_ng_rep)
 
-                    # -n: d/s/t (e.g. panamit => damit, panigarilyo => sigarilyo, panahi => tahi)
-                    elif prefix.endswith("n"):
-                        for l in "dst":
-                            stem_asml_dst = l + stem
-                            stem_asml_dst.assimilation = "d/s/t: " + l
-                            stems.add(stem_asml_dst)
+                    if is_acceptable(stem_ng_rep):
+                        # Assimilation (k/null) (e.g. pangangailangan => kailangan)
+                        stem_ng_rep_asml = "k" + stem_ng_rep
+                        stem_ng_rep_asml.assimilation = "k/null"
+                        stems.add(stem_ng_rep_asml)
 
-                        # '-n' repetition
-                        if (
-                            len(stem) > 2
-                            and prefix.endswith("n")
-                            and stem[1] == "n"
-                            and stem[0] == stem[2]
-                            and is_vowel(stem[0])
-                        ):
-                            # Assimilation (d/s/t)
-                            # (e.g. pananamit => damit, paninigarilyo => sigarilyo, pananahi => tahi)
-                            for l in "dst":
-                                stem_n_rep_asml = l + stem[2:]
-                                stem_n_rep_asml.assimilation = "d/s/t: " + l
-                                stems.add(stem_n_rep_asml)
+            # -m: b/p (e.g. pamigay = bigay, pamagitan => pagitan)
+            elif prefix.endswith("m"):
+                for l in "bp":
+                    stem_asml_bp = l + stem
+                    stem_asml_bp.assimilation = "b/p: " + l
+                    stems.add(stem_asml_bp)
+
+                # '-m' repetition
+                if len(stem) >= 3 and stem[1] == "m" and stem[0] == stem[2]:
+                    # Assimilation (b/p)
+                    # (e.g. pamimigay => bigay, pamamagitan => pagitan)
+                    for l in "bp":
+                        stem_m_rep_asml = l + stem[2:]
+                        stem_m_rep_asml.assimilation = "b/p: " + l
+                        stems.add(stem_m_rep_asml)
+
+            # -n: d/s/t (e.g. panamit => damit, panigarilyo => sigarilyo, panahi => tahi)
+            elif prefix.endswith("n"):
+                for l in "dst":
+                    stem_asml_dst = l + stem
+                    stem_asml_dst.assimilation = "d/s/t: " + l
+                    stems.add(stem_asml_dst)
+
+                # '-n' repetition
+                if len(stem) >= 3 and stem[1] == "n" and stem[0] == stem[2]:
+                    # Assimilation (d/s/t)
+                    # (e.g. pananamit => damit, paninigarilyo => sigarilyo, pananahi => tahi)
+                    for l in "dst":
+                        stem_n_rep_asml = l + stem[2:]
+                        stem_n_rep_asml.assimilation = "d/s/t: " + l
+                        stems.add(stem_n_rep_asml)
 
     return stems
 
