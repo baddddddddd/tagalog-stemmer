@@ -19,7 +19,7 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 
 
 valid_words = get_words()
-valid_words.extend(["split"])
+valid_words.add("split")
 
 WORD_SPLIT_PATTERN = r"[\w']+(?:-\w+)*|[^\w\s]|\n"
 word_split_regex = re.compile(WORD_SPLIT_PATTERN, re.UNICODE)

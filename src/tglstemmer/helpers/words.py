@@ -13,4 +13,4 @@ def get_words(file_path=os.path.join(script_dir, "../resources/tgl_wordlist.txt"
             list: A list of words.
     """
     with open(file_path) as in_file:
-        return [word.strip().lower() for word in in_file.readlines()]
+        return set(word.strip().lower() for word in in_file.readlines())
