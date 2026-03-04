@@ -266,44 +266,42 @@ def stem_inf(tokens: set[Stem]) -> set[Stem]:
     stems = set()
 
     for token in tokens:
+        if len(token) < 4:
+            continue
+
         for infix in INFIXES:
-            if len(token) > len(infix) + 1:
-                stem = None
+            stem = None
 
-                # <infix>V... (e.g. inaral => aral)
-                if token.startswith(infix) and is_vowel(token[2]):
-                    stem = token[2:]
+            # <infix>V... (e.g. inaral => aral)
+            if token.startswith(infix) and is_vowel(token[2]):
+                stem = token[2:]
 
-                # C<infix>V... (e.g. sinulat => sulat)
-                elif (
-                    len(token) > 3
-                    and token[1:3] == infix
-                    and is_consonant(token[0])
-                    and is_vowel(token[3])
-                ):
-                    stem = token[0] + token[3:]
+            # C<infix>V... (e.g. sinulat => sulat)
+            elif is_vowel(token[3]) and is_consonant(token[0]) and token[1:3] == infix:
+                stem = token[0] + token[3:]
 
-                # CC<infix>V... (e.g. chineck => check)
-                elif (
-                    len(token) > 4
-                    and token[2:4] == infix
-                    and is_consonant(token[:2])
-                    and is_vowel(token[4])
-                ):
-                    stem = token[0:2] + token[4:]
+            # these are usually for taglish, nope for now
+            # # CC<infix>V... (e.g. chineck => check)
+            # elif (
+            #     len(token) > 4
+            #     and token[2:4] == infix
+            #     and is_consonant(token[:2])
+            #     and is_vowel(token[4])
+            # ):
+            #     stem = token[0:2] + token[4:]
 
-                # CCC<infix>V... (e.g. splinit => split)
-                elif (
-                    len(token) > 5
-                    and token[3:5] == infix
-                    and is_consonant(token[:3])
-                    and is_vowel(token[5])
-                ):
-                    stem = token[0:3] + token[5:]
+            # # CCC<infix>V... (e.g. splinit => split)
+            # elif (
+            #     len(token) > 5
+            #     and token[3:5] == infix
+            #     and is_consonant(token[:3])
+            #     and is_vowel(token[5])
+            # ):
+            #     stem = token[0:3] + token[5:]
 
-                if stem:
-                    stem.inf = infix
-                    stems.add(stem)
+            if stem:
+                stem.inf = infix
+                stems.add(stem)
 
     return stems
 

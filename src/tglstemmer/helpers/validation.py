@@ -50,7 +50,7 @@ def is_vowel(char):
     return char in VOWELS
 
 
-def is_consonant(*substring):
+def is_consonant(char):
     """Checks if a substring is a consonant.
 
     Args:
@@ -59,4 +59,4 @@ def is_consonant(*substring):
     Returns:
         bool: True if substring is consonant, False otherwise.
     """
-    return all(letter.lower() in CONSONANTS for letter in "".join(substring))
+    return char in CONSONANTS
