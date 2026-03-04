@@ -1,9 +1,9 @@
 """This module provides functions to perform Tagalog stemming on word/s."""
 
 import os
+import re
 from tabulate import tabulate
 from typing import Optional
-from nltk import word_tokenize
 from string import punctuation as PUNCS
 
 from .helpers.alphabet import VOWELS
@@ -21,9 +21,18 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 valid_words = get_words()
 valid_words.extend(["split"])
 
+WORD_SPLIT_PATTERN = r"[\w']+(?:-\w+)*|[^\w\s]|\n"
+word_split_regex = re.compile(WORD_SPLIT_PATTERN, re.UNICODE)
+
+
+def _split_to_words(text: str) -> list:
+    words = word_split_regex.findall(text)
+    return words
+
 
 def get_stems(
-    text: str, valid_words: Optional[list[str]] = valid_words, exclude_punc: bool = True
+    text: str,
+    valid_words: Optional[list[str]] = valid_words,
 ) -> list[str]:
     """Get the stem of each word in a text.
 
@@ -36,11 +45,7 @@ def get_stems(
         list[str]: Stems of each word in the text.
     """
     # Tokenize the text
-    tokens = word_tokenize(text)
-
-    # Optionally exclude punctuation
-    if exclude_punc:
-        tokens = [token for token in tokens if token not in PUNCS]
+    tokens = _split_to_words(text)
 
     # Get stems for each token
     return [get_stem(token, valid_words) for token in tokens]
@@ -655,7 +660,7 @@ if __name__ == "__main__":
     print("stems:", stems)
     print()
 
-    for token in word_tokenize(text):
+    for token in _split_to_words(text):
         candidates = get_stem_candidates(token)
         if candidates:
             table = [{"stem": c, **c.__dict__} for c in candidates]
