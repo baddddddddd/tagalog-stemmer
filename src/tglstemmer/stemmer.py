@@ -118,9 +118,8 @@ def get_stem_candidates(
         valid_words=valid_words,
     )
 
-    if candidates := [
-        stem for stem in stems if is_valid(stem, valid_words) and is_acceptable(stem)
-    ]:
+    candidates = [stem for stem in stems if is_valid(stem, valid_words)]
+    if candidates:
         return sort_candidates(candidates)
     else:
         return [token]
