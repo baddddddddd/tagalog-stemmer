@@ -175,20 +175,9 @@ def apply_stemming(
 
 
 def stem_pre(tokens: set[Stem]) -> set[Stem]:
-    """Stems tokens with prefixes.
-
-    Args:
-        tokens (set[Stem]): A set of words to be stemmed.
-
-    Returns:
-        set[Stem]: A set of stemming attempts for each token, empty otherwise.
-    """
     stems = set()
 
     for token in tokens:
-        # if len(token) <= 4:
-        #     continue
-
         for prefix in PREFIXES:
             if len(token) <= len(prefix) or not token.startswith(prefix):
                 continue
@@ -222,13 +211,11 @@ def stem_pre(tokens: set[Stem]) -> set[Stem]:
 
                 # '-ng' repetition
                 if len(stem) >= 4 and stem[1:3] == "ng" and stem[0] == stem[3]:
-                    # (e.g. pangingisda => isda)
                     stem_ng_rep = stem[3:]
                     stem_ng_rep.rep = stem[:3]
                     stems.add(stem_ng_rep)
 
                     if is_acceptable(stem_ng_rep):
-                        # Assimilation (k/null) (e.g. pangangailangan => kailangan)
                         stem_ng_rep_asml = "k" + stem_ng_rep
                         stem_ng_rep_asml.assimilation = "k/null"
                         stems.add(stem_ng_rep_asml)
@@ -240,30 +227,30 @@ def stem_pre(tokens: set[Stem]) -> set[Stem]:
                     stem_asml_bp.assimilation = "b/p: " + l
                     stems.add(stem_asml_bp)
 
-                # '-m' repetition
                 if len(stem) >= 3 and stem[1] == "m" and stem[0] == stem[2]:
-                    # Assimilation (b/p)
-                    # (e.g. pamimigay => bigay, pamamagitan => pagitan)
                     for l in "bp":
                         stem_m_rep_asml = l + stem[2:]
                         stem_m_rep_asml.assimilation = "b/p: " + l
                         stems.add(stem_m_rep_asml)
 
-            # -n: d/s/t (e.g. panamit => damit, panigarilyo => sigarilyo, panahi => tahi)
+            # -n: s/t (e.g. panamit => damit is NOT deletion. panahi => tahi)
             elif prefix.endswith("n"):
-                for l in "dst":
-                    stem_asml_dst = l + stem
-                    stem_asml_dst.assimilation = "d/s/t: " + l
-                    stems.add(stem_asml_dst)
+                for l in "st":
+                    stem_asml_st = l + stem
+                    stem_asml_st.assimilation = "s/t: " + l
+                    stems.add(stem_asml_st)
 
-                # '-n' repetition
                 if len(stem) >= 3 and stem[1] == "n" and stem[0] == stem[2]:
-                    # Assimilation (d/s/t)
-                    # (e.g. pananamit => damit, paninigarilyo => sigarilyo, pananahi => tahi)
-                    for l in "dst":
+                    for l in "st":
                         stem_n_rep_asml = l + stem[2:]
-                        stem_n_rep_asml.assimilation = "d/s/t: " + l
+                        stem_n_rep_asml.assimilation = "s/t: " + l
                         stems.add(stem_n_rep_asml)
+
+            # Prefix assimilation (e.g. nangako -> pangako)
+            if prefix in ("na", "ma", "ka") and stem.startswith("ng"):
+                stem_pa = "pa" + stem
+                stem_pa.assimilation = "ng/pang"
+                stems.add(stem_pa)
 
     return stems
 
@@ -323,23 +310,10 @@ def stem_inf(tokens: set[Stem]) -> set[Stem]:
 def stem_suf(
     tokens: set[Stem], valid_words: Optional[list[str]] = valid_words
 ) -> set[Stem]:
-    """Stems tokens with suffixes.
-
-    Args:
-        tokens (set[Stem]): A set of words to be stemmed.
-        valid_words (str, optional): A list of valid words to consider for stemming. If None, no validation is performed.
-            Defaults to a list of valid Tagalog words.
-
-    Returns:
-        set[Stem]: A set of stemming attempts for each token, empty otherwise.
-    """
     stems = set()
 
     CONTRACTIONS = set(["ng", "g", "'t", "'y"])
     for token in tokens:
-        # if len(token) <= 4:
-        #     continue
-
         for suffix in SUFFIXES:
             if len(token) <= len(suffix) or not token.endswith(suffix):
                 continue
@@ -348,19 +322,39 @@ def stem_suf(
 
             # contractions
             if len(suffix) <= 2 and suffix in CONTRACTIONS:
-                # 'g' contraction
                 if suffix == "g" and stem[-1] != "n":
                     continue
-
-                # "'t" or "'y" contraction
                 if not is_vowel(stem[-1]) and suffix in ("'t", "'y"):
                     continue
-
                 stem.contraction = suffix
             else:
                 stem.suf = suffix
 
             stems.add(stem)
+
+            # Find the last vowel index for robust o/u and e/i checks
+            last_vowel_idx = -1
+            for i in range(len(stem) - 1, -1, -1):
+                if is_vowel(stem[i]):
+                    last_vowel_idx = i
+                    break
+
+            if last_vowel_idx != -1:
+                # Phoneme change (o/u) (e.g. tauhan => tao, susulungin => sulong)
+                if stem[last_vowel_idx] == "u":
+                    stem_phch_ou = (
+                        stem[:last_vowel_idx] + "o" + stem[last_vowel_idx + 1 :]
+                    )
+                    stem_phch_ou.phoneme_change = "suf: o/u"
+                    stems.add(stem_phch_ou)
+
+                # Phoneme change (e/i)
+                elif stem[last_vowel_idx] == "i":
+                    stem_phch_ei = (
+                        stem[:last_vowel_idx] + "e" + stem[last_vowel_idx + 1 :]
+                    )
+                    stem_phch_ei.phoneme_change = "suf: e/i"
+                    stems.add(stem_phch_ei)
 
             # Phoneme change (d/r) (e.g. bayaran => bayad)
             if stem[-1] == "r" and suffix in ("in", "an"):
@@ -368,41 +362,40 @@ def stem_suf(
                 stem_phch_dr.phoneme_change = "suf: d/r"
                 stems.add(stem_phch_dr)
 
-            # Phoneme change (o/u)
-            # (e.g. tauhan => tao)
-            if len(stem) > 1 and stem[-1] == "u":
-                stem_phch_ou = stem[:-1] + "o"
-                stem_phch_ou.phoneme_change = "suf: o/u"
-                stems.add(stem_phch_ou)
+                # Chain o/u check directly on the d/r transformed stem (e.g. susunurin -> sunur -> sunud -> sunod)
+                last_v_idx_dr = -1
+                for i in range(len(stem_phch_dr) - 1, -1, -1):
+                    if is_vowel(stem_phch_dr[i]):
+                        last_v_idx_dr = i
+                        break
+                if last_v_idx_dr != -1 and stem_phch_dr[last_v_idx_dr] == "u":
+                    stem_phch_dr_ou = (
+                        stem_phch_dr[:last_v_idx_dr]
+                        + "o"
+                        + stem_phch_dr[last_v_idx_dr + 1 :]
+                    )
+                    stem_phch_dr_ou.phoneme_change = "suf: d/r, o/u"
+                    stems.add(stem_phch_dr_ou)
 
-            # (e.g. inuman => inom)
-            elif len(stem) > 2 and stem[-2] == "u":
-                stem_phch_ou = stem[:-2] + "o" + stem[-1]
-                stem_phch_ou.phoneme_change = "suf: o/u"
-                stems.add(stem_phch_ou)
+            # Phoneme change (h/n) e.g. kunin/kunan -> kuha
+            if stem[-1] == "n" and suffix in ("in", "an"):
+                stem_phch_hn = stem[:-1] + "h"
+                stem_phch_hn.phoneme_change = "suf: h/n"
+                stems.add(stem_phch_hn)
+                if stems_vwls_hn := stem_vowel_loss({stem_phch_hn}, valid_words):
+                    stems.update(stems_vwls_hn)
 
-            # Phoneme change (e/i)
-            # (e.g. kingkihan => kingke)
-            if len(stem) > 1 and stem[-1] == "i":
-                stem_phch_ei = stem[:-1] + "e"
-                stem_phch_ei.phoneme_change = "suf: e/i"
-                stems.add(stem_phch_ei)
+            # Irregular complex assimilation (e.g., dinggin -> dinig, pakinggan -> kinig)
+            if stem.endswith("ngg"):
+                stem_ngg = stem[:-3] + "nig"
+                stem_ngg.phoneme_change = "ngg/nig"
+                stems.add(stem_ngg)
 
-            # (e.g. paitin => paet)
-            elif len(stem) > 2 and stem[-2] == "i":
-                stem_phch_ei = stem[:-2] + "e" + stem[-1]
-                stem_phch_ei.phoneme_change = "suf: e/i"
-                stems.add(stem_phch_ei)
-
-            if (
-                len(stem) < 3
-                or not is_consonant(stem[-1])
-                or not is_consonant(stem[-2])
-                or not is_acceptable(stem)
-            ):
+            # Relaxed the cluster constraint to catch dadalhin -> dalh -> dala
+            if len(stem) < 2 or not is_acceptable(stem):
                 continue
 
-            # Vowel loss (e.g. buksan => bukas)
+            # Vowel loss (e.g. buksan => bukas, nilabhan => laba)
             if stems_vwls := stem_vowel_loss({stem}, valid_words):
                 stems.update(stems_vwls)
 
@@ -464,6 +457,7 @@ def stem_rep(tokens: set[Stem]) -> set[Stem]:
 
     for token in tokens:
         stem = None
+        token = token.replace("-", "")
 
         # Starts with a vowel (V-V) (e.g. aalis => alis)
         if len(token) > 2 and token[0] == token[1] and is_vowel(token[0:2]):
