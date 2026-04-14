@@ -203,22 +203,36 @@ def stem_pre(tokens: set[Stem]) -> set[Stem]:
                 continue
 
             # Assimilation
-            # -ng: k/null (e.g. pangailangan => kailangan)
             if prefix.endswith("ng"):
-                stem_asml_knull = "k" + stem
-                stem_asml_knull.assimilation = "k/null"
-                stems.add(stem_asml_knull)
+                # -ng: k/null (e.g. pangailangan => kailangan)
+                stem_asml_pnull = "k" + stem
+                stem_asml_pnull.assimilation = "k/null"
+                stems.add(stem_asml_pnull)
+
+                # -ng: p/null (e.g. pangangako => kailangan)
+                stem_asml_pnull = "p" + stem
+                stem_asml_pnull.assimilation = "p/null"
+                stems.add(stem_asml_pnull)
 
                 # '-ng' repetition
                 if len(stem) >= 4 and stem[1:3] == "ng" and stem[0] == stem[3]:
-                    stem_ng_rep = stem[3:]
-                    stem_ng_rep.rep = stem[:3]
-                    stems.add(stem_ng_rep)
+                    stem_ng_k_rep = stem[3:]
+                    stem_ng_k_rep.rep = stem[:3]
+                    stems.add(stem_ng_k_rep)
 
-                    if is_acceptable(stem_ng_rep):
-                        stem_ng_rep_asml = "k" + stem_ng_rep
-                        stem_ng_rep_asml.assimilation = "k/null"
-                        stems.add(stem_ng_rep_asml)
+                    if is_acceptable(stem_ng_k_rep):
+                        stem_ng_k_rep_asml = "k" + stem_ng_k_rep
+                        stem_ng_k_rep_asml.assimilation = "k/null"
+                        stems.add(stem_ng_k_rep_asml)
+
+                    stem_ng_p_rep = stem[3:]
+                    stem_ng_p_rep.rep = stem[:3]
+                    stems.add(stem_ng_p_rep)
+
+                    if is_acceptable(stem_ng_p_rep):
+                        stem_ng_p_rep_asml = "p" + stem_ng_p_rep
+                        stem_ng_p_rep_asml.assimilation = "p/null"
+                        stems.add(stem_ng_p_rep_asml)
 
             # -m: b/p (e.g. pamigay = bigay, pamagitan => pagitan)
             elif prefix.endswith("m"):
