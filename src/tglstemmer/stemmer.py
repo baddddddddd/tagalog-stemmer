@@ -464,6 +464,17 @@ def stem_rep(tokens: set[Stem]) -> set[Stem]:
             stem = token[1:]
             stem.rep = str(token[0])
 
+        elif (
+            len(token) > 4
+            and token[0] == "d"
+            and token[2] == "r"
+            and token[1] == token[3]
+            and is_vowel(token[1])
+        ):
+            stem = token[0] + token[3:]
+            stem.rep = str(token[:2])
+            stem.phoneme_change = "rep: d/r"
+
         # Starts with a consonant-vowel (CV-CV) (e.g. bibili => bili)
         elif len(token) > 4 and token[0:2] == token[2:4] and is_consonant(token[0]):
             stem = token[2:]
