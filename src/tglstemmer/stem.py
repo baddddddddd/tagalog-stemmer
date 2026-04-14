@@ -76,9 +76,29 @@ class Stem(str):
             bool(self.vowel_loss),
             bool(self.assimilation),
             bool(self.phoneme_change),
-            -self.count_reduplication(),
-            -self.count_affixes(),
+            bool(self.contraction),
+            self.count_reduplication(),
+            self.count_affixes(),
+            abs(len(str(self)) - 4),
+            str(self),
         )
+
+    # def get_sorting_key(self):
+    #     return (
+    #         # 1. PRIMARY: Maximize explanatory power.
+    #         # We want the candidate that successfully identified and stripped the most affixes/reduplications.
+    #         # (Negative sign because lower values sort first in Python)
+    #         -(self.count_affixes() + self.count_reduplication()),
+    #         # 2. SECONDARY: Minimize destructive transformations.
+    #         # A "clean" stem path is more reliable than one requiring metathesis or assimilation.
+    #         self.count_transformations(),
+    #         # 3. TERTIARY: Target common root lengths.
+    #         # Only if candidates tie on the above, prefer root words closer to 4-5 characters
+    #         # to avoid aggressively short or unusually long anomalies.
+    #         abs(len(self) - 4),
+    #         # 4. TIE-BREAKER: Determinism.
+    #         str(self),
+    #     )
 
     # Override str methods
     def __getitem__(self, key):

@@ -9,7 +9,7 @@ from string import punctuation as PUNCS
 from .helpers.alphabet import VOWELS
 from .helpers.validation import is_valid, is_acceptable, is_vowel, is_consonant
 from .helpers.manipulation import replace_letter, swap_letters
-from .helpers.words import get_words
+from .helpers.words import get_words, get_roots
 from .helpers.affixes import PREFIXES, INFIXES, SUFFIXES
 
 from .stem import Stem
@@ -20,6 +20,9 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 
 valid_words = get_words()
 valid_words.add("split")
+
+root_words = get_roots()
+root_words.add("split")
 
 WORD_SPLIT_PATTERN = r"[\w']+(?:-\w+)*|[^\w\s]|\n"
 word_split_regex = re.compile(WORD_SPLIT_PATTERN, re.UNICODE)
@@ -63,11 +66,16 @@ def get_stem(token: str, valid_words: Optional[list[str]] = valid_words) -> Stem
         Stem: Stem of the token.
     """
     token = Stem(token.strip().lower())
+    if str(token) in root_words:
+        return token
 
-    candidates = get_stem_candidates(token, valid_words)
+    # if len(str(token)) <= 4:
+    #     return token
 
-    # Filter out original token using its length
-    candidates = [c for c in candidates if len(c) != len(token)]
+    candidates = get_stem_candidates(token)
+
+    # # Filter out original token using its length
+    # candidates = [c for c in candidates if len(c) != len(token)]
     if not candidates:
         return token
 
@@ -80,9 +88,7 @@ def get_stem(token: str, valid_words: Optional[list[str]] = valid_words) -> Stem
     return candidates[0]
 
 
-def get_stem_candidates(
-    token: str, valid_words: Optional[list[str]] = valid_words
-) -> list[Stem]:
+def get_stem_candidates(token: str) -> list[Stem]:
     """Get the possible stems of a word.
 
     Args:
@@ -113,7 +119,10 @@ def get_stem_candidates(
         valid_words=valid_words,
     )
 
-    candidates = [stem for stem in stems if is_valid(stem, valid_words)]
+    candidates = [stem for stem in stems if str(stem) in root_words]
+    # for c in candidates:
+    #     print(c.__dict__)
+
     if candidates:
         return candidates
     else:
@@ -151,11 +160,17 @@ def apply_stemming(
     Returns:
         set[Stem]: A set of stemming attempts for each token.
     """
+
     for f in functions:
         if f == stem_suf:
             tokens.update(f(tokens, valid_words))
         else:
             tokens.update(f(tokens))
+
+        for token in list(tokens):
+            if str(token) in root_words:
+                return tokens
+
     return tokens
 
 
@@ -171,6 +186,9 @@ def stem_pre(tokens: set[Stem]) -> set[Stem]:
     stems = set()
 
     for token in tokens:
+        # if len(token) <= 4:
+        #     continue
+
         for prefix in PREFIXES:
             if len(token) <= len(prefix) or not token.startswith(prefix):
                 continue
@@ -273,27 +291,27 @@ def stem_inf(tokens: set[Stem]) -> set[Stem]:
                 stem = token[2:]
 
             # C<infix>V... (e.g. sinulat => sulat)
-            elif is_vowel(token[3]) and is_consonant(token[0]) and token[1:3] == infix:
+            elif is_consonant(token[0]) and token[1:3] == infix:
                 stem = token[0] + token[3:]
 
             # these are usually for taglish, nope for now
-            # # CC<infix>V... (e.g. chineck => check)
-            # elif (
-            #     len(token) > 4
-            #     and token[2:4] == infix
-            #     and is_consonant(token[:2])
-            #     and is_vowel(token[4])
-            # ):
-            #     stem = token[0:2] + token[4:]
+            # CC<infix>V... (e.g. chineck => check)
+            elif (
+                len(token) > 4
+                and token[2:4] == infix
+                and is_consonant(token[:2])
+                and is_vowel(token[4])
+            ):
+                stem = token[0:2] + token[4:]
 
-            # # CCC<infix>V... (e.g. splinit => split)
-            # elif (
-            #     len(token) > 5
-            #     and token[3:5] == infix
-            #     and is_consonant(token[:3])
-            #     and is_vowel(token[5])
-            # ):
-            #     stem = token[0:3] + token[5:]
+            # CCC<infix>V... (e.g. splinit => split)
+            elif (
+                len(token) > 5
+                and token[3:5] == infix
+                and is_consonant(token[:3])
+                and is_vowel(token[5])
+            ):
+                stem = token[0:3] + token[5:]
 
             if stem:
                 stem.inf = infix
@@ -319,6 +337,9 @@ def stem_suf(
 
     CONTRACTIONS = set(["ng", "g", "'t", "'y"])
     for token in tokens:
+        # if len(token) <= 4:
+        #     continue
+
         for suffix in SUFFIXES:
             if len(token) <= len(suffix) or not token.endswith(suffix):
                 continue
@@ -456,34 +477,34 @@ def stem_rep(tokens: set[Stem]) -> set[Stem]:
 
         # NOTE: These are for taglish words, so nope for now
         # # Starts with a 2-consonant cluster
-        # elif len(token) > 5:
-        #     # Repeats first consonant and vowel (CV-CCV) (e.g. cecheck)
-        #     if (
-        #         token[0] == token[2]
-        #         and token[1] == token[4]
-        #         and is_consonant(token[0])
-        #         and is_vowel(token[1])
-        #     ):
-        #         stem = token[2:]
-        #         stem.rep = str(token[:2])
+        elif len(token) > 5:
+            # Repeats first consonant and vowel (CV-CCV) (e.g. cecheck)
+            if (
+                token[0] == token[2]
+                and token[1] == token[4]
+                and is_consonant(token[0])
+                and is_vowel(token[1])
+            ):
+                stem = token[2:]
+                stem.rep = str(token[:2])
 
-        #     # Repeats all consonants (CC-CCV) (e.g. chcheck => check)
-        #     elif (
-        #         token[0:2] == token[2:4]
-        #         and is_consonant(token[0:2])
-        #         and is_vowel(token[4])
-        #     ):
-        #         stem = token[2:]
-        #         stem.rep = str(token[:2])
+            # Repeats all consonants (CC-CCV) (e.g. chcheck => check)
+            elif (
+                token[0:2] == token[2:4]
+                and is_consonant(token[0:2])
+                and is_vowel(token[4])
+            ):
+                stem = token[2:]
+                stem.rep = str(token[:2])
 
-        #     # Repeats all consonants and vowel (CCV-CCV) (e.g. checheck => check)
-        #     elif (
-        #         token[0:2] == token[3:5]
-        #         and is_consonant(token[0:2])
-        #         and is_vowel(token[2])
-        #     ):
-        #         stem = token[3:]
-        #         stem.rep = str(token[:3])
+            # Repeats all consonants and vowel (CCV-CCV) (e.g. checheck => check)
+            elif (
+                token[0:2] == token[3:5]
+                and is_consonant(token[0:2])
+                and is_vowel(token[2])
+            ):
+                stem = token[3:]
+                stem.rep = str(token[:3])
 
         # # Starts with a 3-consonant cluster
         # if len(token) > 6:
