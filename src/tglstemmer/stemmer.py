@@ -50,6 +50,10 @@ def get_stem(token_str: str) -> Stem:
 
 def get_stem_candidates(word: str) -> list[Stem]:
     token = Stem(word, original_word=word)
+
+    if word in root_words:
+        return [token]
+
     stems = [token]
 
     stems = apply_stemming(
@@ -126,13 +130,13 @@ def stem_pre(tokens: list[Stem]) -> list[Stem]:
                                 assimilation="k/null",
                             )
                         )
-                        stems.append(
-                            stem.copy_with(
-                                word="p" + stem_word[3:],
-                                rep=stem_word[:3],
-                                assimilation="p/null",
-                            )
-                        )
+                        # stems.append(
+                        #     stem.copy_with(
+                        #         word="p" + stem_word[3:],
+                        #         rep=stem_word[:3],
+                        #         assimilation="p/null",
+                        #     )
+                        # )
 
             elif prefix.endswith("m"):
                 for l in "bp":
@@ -300,6 +304,13 @@ def stem_suf(tokens: list[Stem]) -> list[Stem]:
                     )
                     stems.append(hn_stem)
                     stems.extend(stem_vowel_loss([hn_stem]))
+
+                    # Phoneme change for ng/n (fixes dinatnan -> dating)
+                    ng_stem = base_stem.copy_with(
+                        word=sw[:-1] + "ng", phoneme_change="suf: ng/n"
+                    )
+                    stems.append(ng_stem)
+                    stems.extend(stem_vowel_loss([ng_stem]))
 
                 if sw.endswith("ngg"):
                     stems.append(

@@ -102,15 +102,17 @@ class Stem:
 
     def get_sorting_key(self) -> tuple:
         return (
+            root_words.get(self.word, 0.0) < 1.80,
             self.word not in valid_words,
-            bool(self.metathesis),
-            bool(self.vowel_loss),
-            bool(self.assimilation),
+            bool(self.contraction),
             -root_words.get(self.word, 0.0),
+            -self.count_affix_length(),
+            bool(self.vowel_loss),
+            bool(self.metathesis),
+            bool(self.assimilation),
             self.is_weird_prefix(),
             self.is_missed_redup(),
             self.is_weird_short_word(),
-            -self.count_affix_length(),
             -self.count_redup_length(),
             bool(self.phoneme_change),
             abs(len(self.word) - 4),
