@@ -1,2 +1,2 @@
-VOWELS = set("aeiou")
-CONSONANTS = set("bcdfghjklmnpqrstvwxyz")
+VOWELS = frozenset("aeiou")
+CONSONANTS = frozenset("bcdfghjklmnpqrstvwxyz")

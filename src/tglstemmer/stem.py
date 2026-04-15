@@ -1,42 +1,49 @@
-"""This module provides a class to store Tagalog stems."""
+"""This module provides a fast data structure to store Tagalog stems."""
 
 from typing import Optional
+from .helpers.words import get_words, get_roots
+from .helpers.validation import is_consonant, is_vowel
+
+valid_words = get_words()
+valid_words.add("split")
+root_words = get_roots()
 
 
-class Stem(str):
-    """A stem of a word containing its affixes and transformations.
+class Stem:
+    """A lightweight slot-based class to represent stem candidates."""
 
-    Attributes:
-        pre (str, optional): Prefix. Defaults to None.
-        inf (str, optional): Infix. Defaults to None.
-        suf (stf, optional): Suffix. Defaults to None.
-        rep (rep, optional): Partial reduplication or repetition. Defaults to None.
-        dup (dup, optional): Full reduplication or duplication. Defaults to None.
-        phoneme_change (str, optional): Phoneme change transformation. Defaults to None.
-        assimilation (str, optional): Assimilation transformation. Defaults to None.
-        vowel_loss (str, optional): Vowel loss transformation. Defaults to None.
-        metathesis (str, optional): Metathesis transformation. Defaults to None.
-    """
-
-    def __new__(cls, stem: str, *args, **kwargs):
-        # Create a new instance of Stem with the string value stem
-        return super().__new__(cls, stem)
+    __slots__ = [
+        "word",
+        "original_word",
+        "pre",
+        "inf",
+        "suf",
+        "rep",
+        "dup",
+        "contraction",
+        "phoneme_change",
+        "assimilation",
+        "vowel_loss",
+        "metathesis",
+    ]
 
     def __init__(
         self,
-        stem,
-        pre: Optional[str] = None,
-        inf: Optional[str] = None,
-        suf: Optional[str] = None,
-        rep: Optional[str] = None,
-        dup: Optional[str] = None,
-        contraction: Optional[str] = None,
-        phoneme_change: Optional[str] = None,
-        assimilation: Optional[str] = None,
-        vowel_loss: Optional[str] = None,
-        metathesis: Optional[str] = None,
+        word: str,
+        original_word: Optional[str] = None,
+        pre: str = "",
+        inf: str = "",
+        suf: str = "",
+        rep: str = "",
+        dup: str = "",
+        contraction: str = "",
+        phoneme_change: str = "",
+        assimilation: str = "",
+        vowel_loss: str = "",
+        metathesis: bool = False,
     ):
-        # Initialize additional attributes
+        self.word = word
+        self.original_word = original_word if original_word is not None else word
         self.pre = pre
         self.inf = inf
         self.suf = suf
@@ -48,107 +55,70 @@ class Stem(str):
         self.vowel_loss = vowel_loss
         self.metathesis = metathesis
 
-    def count_affixes(self):
-        """Counts the length of affixes."""
-        return (
-            len(self.pre or "")
-            + len(self.inf or "")
-            + len(self.suf or "")
-            + len(self.contraction or "")
+    def copy_with(self, word=None, **kwargs):
+        """Creates a fast copy of the current stem with updated attributes."""
+        return Stem(
+            word=word if word is not None else self.word,
+            original_word=self.original_word,
+            pre=kwargs.get("pre", self.pre),
+            inf=kwargs.get("inf", self.inf),
+            suf=kwargs.get("suf", self.suf),
+            rep=kwargs.get("rep", self.rep),
+            dup=kwargs.get("dup", self.dup),
+            contraction=kwargs.get("contraction", self.contraction),
+            phoneme_change=kwargs.get("phoneme_change", self.phoneme_change),
+            assimilation=kwargs.get("assimilation", self.assimilation),
+            vowel_loss=kwargs.get("vowel_loss", self.vowel_loss),
+            metathesis=kwargs.get("metathesis", self.metathesis),
         )
 
-    def count_reduplication(self):
-        """Counts the length of reduplication (repetition and duplication)."""
-        return len(self.rep or "") + len(self.dup or "")
+    def count_affix_length(self) -> int:
+        return len(self.pre) + len(self.inf) + len(self.suf) + len(self.contraction)
 
-    def count_transformations(self):
-        """Counts the number of transformations."""
-        return (
-            int(bool(self.phoneme_change))
-            + int(bool(self.assimilation))
-            + int(bool(self.vowel_loss))
-            + int(bool(self.metathesis))
-        )
+    def count_redup_length(self) -> int:
+        return len(self.rep)
 
-    def get_sorting_key(self):
+    def is_weird_prefix(self) -> bool:
+        if not self.pre:
+            return False
+        if is_consonant(self.pre[-1]) and is_vowel(self.word[0]):
+            return self.pre + "-" not in self.original_word
+        return False
+
+    def is_missed_redup(self) -> bool:
+        if self.rep or not self.pre:
+            return False
+        return self.pre[-2:] == self.word[:2]
+
+    def is_weird_short_word(self) -> bool:
+        n = len(self.word)
+        if n >= 4:
+            return False
+        if n <= 1:
+            return True
+        vowels = sum(1 for c in self.word if is_vowel(c))
+        consonants = n - vowels
+        return consonants >= vowels if n <= 2 else consonants > vowels
+
+    def get_sorting_key(self) -> tuple:
         return (
+            self.word not in valid_words,
             bool(self.metathesis),
             bool(self.vowel_loss),
             bool(self.assimilation),
+            -root_words.get(self.word, 0.0),
+            self.is_weird_prefix(),
+            self.is_missed_redup(),
+            self.is_weird_short_word(),
+            -self.count_affix_length(),
+            -self.count_redup_length(),
             bool(self.phoneme_change),
-            bool(self.contraction),
-            self.count_reduplication(),
-            self.count_affixes(),
-            abs(len(str(self)) - 4),
-            str(self),
+            abs(len(self.word) - 4),
+            self.word,
         )
 
-    # def get_sorting_key(self):
-    #     return (
-    #         # 1. PRIMARY: Maximize explanatory power.
-    #         # We want the candidate that successfully identified and stripped the most affixes/reduplications.
-    #         # (Negative sign because lower values sort first in Python)
-    #         -(self.count_affixes() + self.count_reduplication()),
-    #         # 2. SECONDARY: Minimize destructive transformations.
-    #         # A "clean" stem path is more reliable than one requiring metathesis or assimilation.
-    #         self.count_transformations(),
-    #         # 3. TERTIARY: Target common root lengths.
-    #         # Only if candidates tie on the above, prefer root words closer to 4-5 characters
-    #         # to avoid aggressively short or unusually long anomalies.
-    #         abs(len(self) - 4),
-    #         # 4. TIE-BREAKER: Determinism.
-    #         str(self),
-    #     )
+    def __str__(self):
+        return self.word
 
-    # Override str methods
-    def __getitem__(self, key):
-        # Override slicing
-        return Stem(super().__getitem__(key), **self.__dict__)
-
-    def __add__(self, other):
-        # Override concatenation
-        if isinstance(other, str):
-            other = Stem(other)
-
-        if not isinstance(other, Stem):
-            return NotImplemented
-
-        return Stem(super().__add__(other), **self.__dict__)
-
-    def __radd__(self, other):
-        # Override concatenation
-        if isinstance(other, str):
-            other = Stem(other)
-
-        if not isinstance(other, Stem):
-            return NotImplemented
-
-        return Stem(other + self, **self.__dict__)
-
-    def split(self, sep=None, maxsplit=-1):
-        substrings = super().split(sep, maxsplit)
-        return [Stem(substring, **self.__dict__) for substring in substrings]
-
-    def replace(self, old, new, count=-1):
-        return Stem(super().replace(old, new, count), **self.__dict__)
-
-    def strip(self, chars=None):
-        return Stem(super().strip(chars), **self.__dict__)
-
-    def lstrip(self, chars=None):
-        return Stem(super().lstrip(chars), **self.__dict__)
-
-    def rstrip(self, chars=None):
-        return Stem(super().rstrip(chars), **self.__dict__)
-
-    def upper(self):
-        return Stem(super().upper(), **self.__dict__)
-
-    def lower(self):
-        return Stem(super().lower(), **self.__dict__)
-
-    def title(self):
-        return Stem(super().title(), **self.__dict__)
-
-    def capitalize(self):
-        return Stem(super().capitalize(), **self.__dict__)
+    def __repr__(self):
+        return f"Stem({self.word})"

@@ -2,109 +2,56 @@
 
 import os
 import re
+import heapq
+from functools import lru_cache
 from tabulate import tabulate
 from typing import Optional
-from string import punctuation as PUNCS
 
-from .helpers.alphabet import VOWELS
+from .helpers.alphabet import VOWELS, CONSONANTS
 from .helpers.validation import is_valid, is_acceptable, is_vowel, is_consonant
-from .helpers.manipulation import replace_letter, swap_letters
-from .helpers.words import get_words, get_roots
-from .helpers.affixes import PREFIXES, INFIXES, SUFFIXES
+from .helpers.manipulation import swap_letters
+from .helpers.affixes import PREFIXES, INFIXES, SUFFIXES, CONTRACTIONS
 
-from .stem import Stem
-
+from .stem import Stem, valid_words, root_words
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
-
-
-valid_words = get_words()
-valid_words.add("split")
-
-root_words = get_roots()
-root_words.add("split")
 
 WORD_SPLIT_PATTERN = r"[\w']+(?:-\w+)*|[^\w\s]|\n"
 word_split_regex = re.compile(WORD_SPLIT_PATTERN, re.UNICODE)
 
 
-def _split_to_words(text: str) -> list:
-    words = word_split_regex.findall(text)
-    return words
+def _split_to_words(text: str) -> list[str]:
+    return word_split_regex.findall(text)
+
+
+def prune(tokens: list[Stem], k: int = 10) -> list[Stem]:
+    if len(tokens) <= k:
+        return sorted(tokens, key=lambda x: x.get_sorting_key())
+    return heapq.nsmallest(k, tokens, key=lambda x: x.get_sorting_key())
 
 
 def get_stems(
-    text: str,
-    valid_words: Optional[list[str]] = valid_words,
+    text: str, valid_words_list: Optional[set[str]] = valid_words
 ) -> list[str]:
-    """Get the stem of each word in a text.
-
-    Args:
-        text (str): Any text.
-        valid_words (Optional[list[str]]): A list of valid words to consider for stemming. If None, no validation is performed.
-        exclude_punc (bool): Whether to exclude punctuation from tokens. Defaults to a list of valid Tagalog words.
-
-    Returns:
-        list[str]: Stems of each word in the text.
-    """
-    # Tokenize the text
-    tokens = _split_to_words(text)
-
-    # Get stems for each token
-    return [get_stem(token, valid_words) for token in tokens]
+    return [get_stem(token).word for token in _split_to_words(text)]
 
 
-def get_stem(token: str, valid_words: Optional[list[str]] = valid_words) -> Stem:
-    """Get the stem of a word.
+@lru_cache(maxsize=1_000_000)
+def get_stem(token_str: str) -> Stem:
+    cleaned_word = token_str.strip().lower()
+    token = Stem(cleaned_word)
 
-    Args:
-        token (str): Word to be stemmed.
-        valid_words (str, optional): A list of valid words to consider for stemming. If None, no validation is performed.
-            Defaults to a list of valid Tagalog words.
-
-    Returns:
-        Stem: Stem of the token.
-    """
-    token = Stem(token.strip().lower())
-    if str(token) in root_words:
-        return token
-
-    # if len(str(token)) <= 4:
-    #     return token
-
-    candidates = get_stem_candidates(token)
-
-    # # Filter out original token using its length
-    # candidates = [c for c in candidates if len(c) != len(token)]
+    candidates = get_stem_candidates(cleaned_word)
     if not candidates:
         return token
 
-    # # Filter out candidates with transformations and contractions
-    # no_transformations = [c for c in candidates if c.count_transformations() == 0]
-    # no_contractions = [c for c in candidates if not c.contraction]
-    # no_tran_cont = list(set(no_transformations) & set(no_contractions))
-
-    candidates = sort_candidates(candidates)
-    return candidates[0]
+    return prune(candidates, 1)[0]
 
 
-def get_stem_candidates(token: str) -> list[Stem]:
-    """Get the possible stems of a word.
+def get_stem_candidates(word: str) -> list[Stem]:
+    token = Stem(word, original_word=word)
+    stems = [token]
 
-    Args:
-        token (str): Word to be stemmed.
-        valid_words (str, optional): A list of valid words to consider for stemming. If None, no validation is performed.
-            Defaults to a list of valid Tagalog words.
-
-    Returns:
-        list[Stem]: A list of possible valid and acceptable stems or candidates of the token.
-    """
-    token = Stem(token.strip().lower())
-
-    # Initialize a list of all stemming attempts
-    stems = {token}
-
-    # Apply all stemming functions in order
     stems = apply_stemming(
         functions=(
             stem_dup,
@@ -116,490 +63,344 @@ def get_stem_candidates(token: str) -> list[Stem]:
             stem_dup,
         ),
         tokens=stems,
-        valid_words=valid_words,
     )
 
-    candidates = [stem for stem in stems if str(stem) in root_words]
-    # for c in candidates:
-    #     print(c.__dict__)
-
-    if candidates:
-        return candidates
-    else:
-        return [token]
+    return stems if stems else [token]
 
 
-def sort_candidates(candidates: list[Stem]) -> list[Stem]:
-    """Sorts stem candidates by longest affix and reduplication.
-
-    Args:
-        candidates (list[Stem]): A list of stem candidates.
-
-    Returns:
-        list[Stem]: Ordered list of the stem candidates.
-    """
-    return sorted(
-        candidates,
-        key=lambda c: c.get_sorting_key(),
-        # key=lambda c: c.count_affixes() + c.count_reduplication(),
-        # reverse=True,
-    )
-
-
-def apply_stemming(
-    functions: tuple, tokens: set[Stem], valid_words: Optional[list[str]] = valid_words
-) -> set[Stem]:
-    """Apply all stemming functions to a list of tokens.
-
-    Args:
-        functions (tuple): A tuple of stemming functions to be applied to the tokens.
-        tokens (set[Stem]): A set of words to be stemmed.
-        valid_words (str, optional): A list of valid words to consider for stemming. If None, no validation is performed.
-            Defaults to None.
-
-    Returns:
-        set[Stem]: A set of stemming attempts for each token.
-    """
-
+def apply_stemming(functions: tuple, tokens: list[Stem]) -> list[Stem]:
     for f in functions:
-        if f == stem_suf:
-            tokens.update(f(tokens, valid_words))
-        else:
-            tokens.update(f(tokens))
-
-        for token in list(tokens):
-            if str(token) in root_words:
-                return tokens
-
+        new_tokens = []
+        new_tokens.extend(f(tokens))
+        tokens = prune(tokens + new_tokens)
     return tokens
 
 
-def stem_pre(tokens: set[Stem]) -> set[Stem]:
-    stems = set()
-
+def stem_pre(tokens: list[Stem]) -> list[Stem]:
+    stems = []
     for token in tokens:
+        word = token.word
         for prefix in PREFIXES:
-            if len(token) <= len(prefix) or not token.startswith(prefix):
+            if len(word) <= len(prefix) or not word.startswith(prefix):
                 continue
 
-            stem = token[len(prefix) :]
-            stem.pre = prefix
+            stem_word = word[len(prefix) :]
+            if stem_word.startswith("-"):
+                stem_word = stem_word[1:]
 
-            if stem[0] == "-":
-                stem = stem[1:]
-
-            if len(stem) <= 1:
+            if len(stem_word) <= 1:
                 continue
 
-            stems.add(stem)
+            stem = token.copy_with(word=stem_word, pre=prefix)
+            stems.append(stem)
 
-            # Phoneme change (d/r) (e.g. parami => dami)
-            if stem[0] == "r" and is_vowel(stem[1]) and is_vowel(prefix[-1]):
-                stem_phch_dr = "d" + stem[1:]
-                stem_phch_dr.phoneme_change = "pre: d/r"
-                stems.add(stem_phch_dr)
+            # Phoneme change (d/r)
+            if stem_word[0] == "r" and is_vowel(stem_word[1]) and is_vowel(prefix[-1]):
+                stems.append(
+                    stem.copy_with(word="d" + stem_word[1:], phoneme_change="pre: d/r")
+                )
 
-            if not is_vowel(stem[0]) or not is_acceptable(stem):
+            if not is_vowel(stem_word[0]) or not is_acceptable(stem_word):
                 continue
 
             # Assimilation
             if prefix.endswith("ng"):
-                # -ng: k/null (e.g. pangailangan => kailangan)
-                stem_asml_pnull = "k" + stem
-                stem_asml_pnull.assimilation = "k/null"
-                stems.add(stem_asml_pnull)
+                stems.append(
+                    stem.copy_with(word="k" + stem_word, assimilation="k/null")
+                )
+                stems.append(
+                    stem.copy_with(word="p" + stem_word, assimilation="p/null")
+                )
 
-                # -ng: p/null (e.g. pangangako => kailangan)
-                stem_asml_pnull = "p" + stem
-                stem_asml_pnull.assimilation = "p/null"
-                stems.add(stem_asml_pnull)
+                if (
+                    len(stem_word) >= 4
+                    and stem_word[1:3] == "ng"
+                    and stem_word[0] == stem_word[3]
+                ):
+                    stems.append(stem.copy_with(word=stem_word[3:], rep=stem_word[:3]))
+                    if is_acceptable(stem_word[3:]):
+                        stems.append(
+                            stem.copy_with(
+                                word="k" + stem_word[3:],
+                                rep=stem_word[:3],
+                                assimilation="k/null",
+                            )
+                        )
+                        stems.append(
+                            stem.copy_with(
+                                word="p" + stem_word[3:],
+                                rep=stem_word[:3],
+                                assimilation="p/null",
+                            )
+                        )
 
-                # '-ng' repetition
-                if len(stem) >= 4 and stem[1:3] == "ng" and stem[0] == stem[3]:
-                    stem_ng_k_rep = stem[3:]
-                    stem_ng_k_rep.rep = stem[:3]
-                    stems.add(stem_ng_k_rep)
-
-                    if is_acceptable(stem_ng_k_rep):
-                        stem_ng_k_rep_asml = "k" + stem_ng_k_rep
-                        stem_ng_k_rep_asml.assimilation = "k/null"
-                        stems.add(stem_ng_k_rep_asml)
-
-                    stem_ng_p_rep = stem[3:]
-                    stem_ng_p_rep.rep = stem[:3]
-                    stems.add(stem_ng_p_rep)
-
-                    if is_acceptable(stem_ng_p_rep):
-                        stem_ng_p_rep_asml = "p" + stem_ng_p_rep
-                        stem_ng_p_rep_asml.assimilation = "p/null"
-                        stems.add(stem_ng_p_rep_asml)
-
-            # -m: b/p (e.g. pamigay = bigay, pamagitan => pagitan)
             elif prefix.endswith("m"):
                 for l in "bp":
-                    stem_asml_bp = l + stem
-                    stem_asml_bp.assimilation = "b/p: " + l
-                    stems.add(stem_asml_bp)
-
-                if len(stem) >= 3 and stem[1] == "m" and stem[0] == stem[2]:
+                    stems.append(
+                        stem.copy_with(word=l + stem_word, assimilation=f"b/p: {l}")
+                    )
+                if (
+                    len(stem_word) >= 3
+                    and stem_word[1] == "m"
+                    and stem_word[0] == stem_word[2]
+                ):
                     for l in "bp":
-                        stem_m_rep_asml = l + stem[2:]
-                        stem_m_rep_asml.assimilation = "b/p: " + l
-                        stems.add(stem_m_rep_asml)
+                        stems.append(
+                            stem.copy_with(
+                                word=l + stem_word[2:],
+                                rep=stem_word[:3],
+                                assimilation=f"b/p: {l}",
+                            )
+                        )
 
-            # -n: s/t (e.g. panamit => damit is NOT deletion. panahi => tahi)
             elif prefix.endswith("n"):
                 for l in "st":
-                    stem_asml_st = l + stem
-                    stem_asml_st.assimilation = "s/t: " + l
-                    stems.add(stem_asml_st)
-
-                if len(stem) >= 3 and stem[1] == "n" and stem[0] == stem[2]:
+                    stems.append(
+                        stem.copy_with(word=l + stem_word, assimilation=f"s/t: {l}")
+                    )
+                if (
+                    len(stem_word) >= 3
+                    and stem_word[1] == "n"
+                    and stem_word[0] == stem_word[2]
+                ):
                     for l in "st":
-                        stem_n_rep_asml = l + stem[2:]
-                        stem_n_rep_asml.assimilation = "s/t: " + l
-                        stems.add(stem_n_rep_asml)
+                        stems.append(
+                            stem.copy_with(
+                                word=l + stem_word[2:],
+                                rep=stem_word[:3],
+                                assimilation=f"s/t: {l}",
+                            )
+                        )
 
-            # Prefix assimilation (e.g. nangako -> pangako)
-            if prefix in ("na", "ma", "ka") and stem.startswith("ng"):
-                stem_pa = "pa" + stem
-                stem_pa.assimilation = "ng/pang"
-                stems.add(stem_pa)
+            if prefix in ("na", "ma", "ka") and stem_word.startswith("ng"):
+                stems.append(
+                    stem.copy_with(word="pa" + stem_word, assimilation="ng/pang")
+                )
 
     return stems
 
 
-def stem_inf(tokens: set[Stem]) -> set[Stem]:
-    """Stems tokens with infixes.
-
-    Args:
-        tokens (set[Stem]): A set of words to be stemmed.
-
-    Returns:
-        set[Stem]: A set of stemming attempts for each token, empty otherwise.
-    """
-    stems = set()
-
+def stem_inf(tokens: list[Stem]) -> list[Stem]:
+    stems = []
     for token in tokens:
-        if len(token) < 4:
+        word = token.word
+        if len(word) < 4:
             continue
 
         for infix in INFIXES:
-            stem = None
-
-            # <infix>V... (e.g. inaral => aral)
-            if token.startswith(infix) and is_vowel(token[2]):
-                stem = token[2:]
-
-            # C<infix>V... (e.g. sinulat => sulat)
-            elif is_consonant(token[0]) and token[1:3] == infix:
-                stem = token[0] + token[3:]
-
-            # these are usually for taglish, nope for now
-            # CC<infix>V... (e.g. chineck => check)
+            stem_word = None
+            if word.startswith(infix) and is_vowel(word[2]):
+                stem_word = word[2:]
+            elif is_consonant(word[0]) and word[1:3] == infix:
+                stem_word = word[0] + word[3:]
             elif (
-                len(token) > 4
-                and token[2:4] == infix
-                and is_consonant(token[:2])
-                and is_vowel(token[4])
+                len(word) > 4
+                and word[2:4] == infix
+                and is_consonant(word[:2])
+                and is_vowel(word[4])
             ):
-                stem = token[0:2] + token[4:]
-
-            # CCC<infix>V... (e.g. splinit => split)
+                stem_word = word[0:2] + word[4:]
             elif (
-                len(token) > 5
-                and token[3:5] == infix
-                and is_consonant(token[:3])
-                and is_vowel(token[5])
+                len(word) > 5
+                and word[3:5] == infix
+                and is_consonant(word[:3])
+                and is_vowel(word[5])
             ):
-                stem = token[0:3] + token[5:]
+                stem_word = word[0:3] + word[5:]
 
-            if stem:
-                stem.inf = infix
-                stems.add(stem)
-
+            if stem_word:
+                stems.append(token.copy_with(word=stem_word, inf=infix))
     return stems
 
 
-def stem_suf(
-    tokens: set[Stem], valid_words: Optional[list[str]] = valid_words
-) -> set[Stem]:
-    stems = set()
-
-    CONTRACTIONS = set(["ng", "g", "'t", "'y"])
+def stem_suf(tokens: list[Stem]) -> list[Stem]:
+    stems = []
     for token in tokens:
+        word = token.word
         for suffix in SUFFIXES:
-            if len(token) <= len(suffix) or not token.endswith(suffix):
+            if len(word) <= len(suffix) or not word.endswith(suffix):
                 continue
 
-            stem = token[: -len(suffix)]
+            stem_word = word[: -len(suffix)]
+            possibilities = [stem_word]
 
-            # contractions
-            if len(suffix) <= 2 and suffix in CONTRACTIONS:
-                if suffix == "g" and stem[-1] != "n":
+            if (
+                len(stem_word) >= 2
+                and is_vowel(suffix[0])
+                and stem_word[-1] in ("n", "h")
+                and is_vowel(stem_word[-2])
+            ):
+                possibilities.append(stem_word[:-1])
+
+            for sw in possibilities:
+                is_contraction = len(suffix) <= 2 and suffix in CONTRACTIONS
+                if is_contraction:
+                    if suffix == "g" and sw[-1] != "n":
+                        continue
+                    if not is_vowel(sw[-1]) and suffix in ("'t", "'y"):
+                        continue
+                    base_stem = token.copy_with(word=sw, contraction=suffix)
+                else:
+                    base_stem = token.copy_with(word=sw, suf=suffix)
+
+                stems.append(base_stem)
+
+                last_vowel_idx = next(
+                    (i for i in range(len(sw) - 1, -1, -1) if is_vowel(sw[i])), -1
+                )
+
+                if last_vowel_idx != -1:
+                    if sw[last_vowel_idx] == "u":
+                        stems.append(
+                            base_stem.copy_with(
+                                word=sw[:last_vowel_idx]
+                                + "o"
+                                + sw[last_vowel_idx + 1 :],
+                                phoneme_change="suf: o/u",
+                            )
+                        )
+                    elif sw[last_vowel_idx] == "i":
+                        stems.append(
+                            base_stem.copy_with(
+                                word=sw[:last_vowel_idx]
+                                + "e"
+                                + sw[last_vowel_idx + 1 :],
+                                phoneme_change="suf: e/i",
+                            )
+                        )
+
+                if sw[-1] == "r" and suffix in ("in", "an"):
+                    dr_word = sw[:-1] + "d"
+                    dr_stem = base_stem.copy_with(
+                        word=dr_word, phoneme_change="suf: d/r"
+                    )
+                    stems.append(dr_stem)
+
+                    last_v_idx_dr = next(
+                        (
+                            i
+                            for i in range(len(dr_word) - 1, -1, -1)
+                            if is_vowel(dr_word[i])
+                        ),
+                        -1,
+                    )
+                    if last_v_idx_dr != -1 and dr_word[last_v_idx_dr] == "u":
+                        stems.append(
+                            dr_stem.copy_with(
+                                word=dr_word[:last_v_idx_dr]
+                                + "o"
+                                + dr_word[last_v_idx_dr + 1 :],
+                                phoneme_change="suf: d/r, o/u",
+                            )
+                        )
+
+                if sw[-1] == "n" and suffix in ("in", "an"):
+                    hn_stem = base_stem.copy_with(
+                        word=sw[:-1] + "h", phoneme_change="suf: h/n"
+                    )
+                    stems.append(hn_stem)
+                    stems.extend(stem_vowel_loss([hn_stem]))
+
+                if sw.endswith("ngg"):
+                    stems.append(
+                        base_stem.copy_with(
+                            word=sw[:-3] + "nig", phoneme_change="ngg/nig"
+                        )
+                    )
+
+                if len(sw) < 2 or not is_acceptable(sw):
                     continue
-                if not is_vowel(stem[-1]) and suffix in ("'t", "'y"):
-                    continue
-                stem.contraction = suffix
-            else:
-                stem.suf = suffix
 
-            stems.add(stem)
+                stems.extend(stem_vowel_loss([base_stem]))
 
-            # Find the last vowel index for robust o/u and e/i checks
-            last_vowel_idx = -1
-            for i in range(len(stem) - 1, -1, -1):
-                if is_vowel(stem[i]):
-                    last_vowel_idx = i
-                    break
-
-            if last_vowel_idx != -1:
-                # Phoneme change (o/u) (e.g. tauhan => tao, susulungin => sulong)
-                if stem[last_vowel_idx] == "u":
-                    stem_phch_ou = (
-                        stem[:last_vowel_idx] + "o" + stem[last_vowel_idx + 1 :]
-                    )
-                    stem_phch_ou.phoneme_change = "suf: o/u"
-                    stems.add(stem_phch_ou)
-
-                # Phoneme change (e/i)
-                elif stem[last_vowel_idx] == "i":
-                    stem_phch_ei = (
-                        stem[:last_vowel_idx] + "e" + stem[last_vowel_idx + 1 :]
-                    )
-                    stem_phch_ei.phoneme_change = "suf: e/i"
-                    stems.add(stem_phch_ei)
-
-            # Phoneme change (d/r) (e.g. bayaran => bayad)
-            if stem[-1] == "r" and suffix in ("in", "an"):
-                stem_phch_dr = stem[:-1] + "d"
-                stem_phch_dr.phoneme_change = "suf: d/r"
-                stems.add(stem_phch_dr)
-
-                # Chain o/u check directly on the d/r transformed stem (e.g. susunurin -> sunur -> sunud -> sunod)
-                last_v_idx_dr = -1
-                for i in range(len(stem_phch_dr) - 1, -1, -1):
-                    if is_vowel(stem_phch_dr[i]):
-                        last_v_idx_dr = i
-                        break
-                if last_v_idx_dr != -1 and stem_phch_dr[last_v_idx_dr] == "u":
-                    stem_phch_dr_ou = (
-                        stem_phch_dr[:last_v_idx_dr]
-                        + "o"
-                        + stem_phch_dr[last_v_idx_dr + 1 :]
-                    )
-                    stem_phch_dr_ou.phoneme_change = "suf: d/r, o/u"
-                    stems.add(stem_phch_dr_ou)
-
-            # Phoneme change (h/n) e.g. kunin/kunan -> kuha
-            if stem[-1] == "n" and suffix in ("in", "an"):
-                stem_phch_hn = stem[:-1] + "h"
-                stem_phch_hn.phoneme_change = "suf: h/n"
-                stems.add(stem_phch_hn)
-                if stems_vwls_hn := stem_vowel_loss({stem_phch_hn}, valid_words):
-                    stems.update(stems_vwls_hn)
-
-            # Irregular complex assimilation (e.g., dinggin -> dinig, pakinggan -> kinig)
-            if stem.endswith("ngg"):
-                stem_ngg = stem[:-3] + "nig"
-                stem_ngg.phoneme_change = "ngg/nig"
-                stems.add(stem_ngg)
-
-            # Relaxed the cluster constraint to catch dadalhin -> dalh -> dala
-            if len(stem) < 2 or not is_acceptable(stem):
-                continue
-
-            # Vowel loss (e.g. buksan => bukas, nilabhan => laba)
-            if stems_vwls := stem_vowel_loss({stem}, valid_words):
-                stems.update(stems_vwls)
-
-            # Metathesis (e.g. tamnin => tanim)
-            stem_mtts = swap_letters(stem, -1, -2)
-            stem_mtts.metathesis = True
-
-            if is_valid(stem_mtts, valid_words):
-                stems.add(stem_mtts)
-
-            elif stems_vwls_mtts := stem_vowel_loss({stem_mtts}, valid_words):
-                stems.update(stems_vwls_mtts)
+                mtts_word = swap_letters(sw, -1, -2)
+                mtts_stem = base_stem.copy_with(word=mtts_word, metathesis=True)
+                if is_valid(mtts_word, valid_words):
+                    stems.append(mtts_stem)
+                else:
+                    stems.extend(stem_vowel_loss([mtts_stem]))
 
     return stems
 
 
-def stem_vowel_loss(
-    tokens: set[Stem], valid_words: Optional[list[str]] = valid_words
-) -> set[Stem]:
-    """Stems tokens with vowel loss.
-
-    Args:
-        tokens (set[Stem]): A set of words to be stemmed.
-        valid_words (str, optional): A list of valid words to consider for stemming. If None, no validation is performed.
-            Defaults to a list of valid Tagalog words.
-
-    Returns:
-        set[Stem]: A set of stemming attempts for each token, empty otherwise.
-    """
-    stems = set()
-
+def stem_vowel_loss(tokens: list[Stem]) -> list[Stem]:
+    stems = []
     for token in tokens:
+        word = token.word
         for vowel in VOWELS:
-            if len(token) > 1:
-                stem = token + vowel
-                if valid_stem := is_valid(stem, valid_words):
-                    valid_stem.vowel_loss = vowel
-                    stems.add(valid_stem)
-
-            if len(token) > 2:
-                stem = token[:-1] + vowel + token[-1]
-                if valid_stem := is_valid(stem, valid_words):
-                    valid_stem.vowel_loss = vowel
-                    stems.add(valid_stem)
-
+            if len(word) > 1:
+                cand = word + vowel
+                if is_valid(cand, valid_words):
+                    stems.append(token.copy_with(word=cand, vowel_loss=vowel))
+            if len(word) > 2:
+                cand = word[:-1] + vowel + word[-1]
+                if is_valid(cand, valid_words):
+                    stems.append(token.copy_with(word=cand, vowel_loss=vowel))
     return stems
 
 
-def stem_rep(tokens: set[Stem]) -> set[Stem]:
-    """Stems tokens with partial reduplication (simply referred as repetition).
-
-    Args:
-        tokens (set[Stem]): A set of words to be stemmed.
-
-    Returns:
-        set[Stem]: A set of stemming attempts for each token, empty otherwise.
-    """
-    stems = set()
-
+def stem_rep(tokens: list[Stem]) -> list[Stem]:
+    stems = []
     for token in tokens:
-        stem = None
-        token = token.replace("-", "")
+        word = token.word.replace("-", "")
 
         # Starts with a vowel (V-V) (e.g. aalis => alis)
-        if len(token) > 2 and token[0] == token[1] and is_vowel(token[0:2]):
-            stem = token[1:]
-            stem.rep = str(token[0])
+        if len(word) > 2 and word[0] == word[1] and is_vowel(word[0:2]):
+            stems.append(token.copy_with(word=word[1:], rep=word[0]))
 
+        # d/r repetition (e.g. darating => dating)
         elif (
-            len(token) > 4
-            and token[0] == "d"
-            and token[2] == "r"
-            and token[1] == token[3]
-            and is_vowel(token[1])
+            len(word) > 4
+            and word[0] == "d"
+            and word[2] == "r"
+            and word[1] == word[3]
+            and is_vowel(word[1])
         ):
-            stem = token[0] + token[3:]
-            stem.rep = str(token[:2])
-            stem.phoneme_change = "rep: d/r"
+            stems.append(
+                token.copy_with(
+                    word=word[0] + word[3:], rep=word[:2], phoneme_change="rep: d/r"
+                )
+            )
 
         # Starts with a consonant-vowel (CV-CV) (e.g. bibili => bili)
-        elif len(token) > 4 and token[0:2] == token[2:4] and is_consonant(token[0]):
-            stem = token[2:]
-            stem.rep = str(token[:2])
+        elif len(word) > 4 and word[0:2] == word[2:4] and is_consonant(word[0]):
+            stems.append(token.copy_with(word=word[2:], rep=word[:2]))
 
-        # NOTE: These are for taglish words, so nope for now
-        # # Starts with a 2-consonant cluster
-        elif len(token) > 5:
-            # Repeats first consonant and vowel (CV-CCV) (e.g. cecheck)
+        # Taglish 2-consonant clusters
+        elif len(word) > 5:
+            # CV-CCV (e.g. cecheck)
             if (
-                token[0] == token[2]
-                and token[1] == token[4]
-                and is_consonant(token[0])
-                and is_vowel(token[1])
+                word[0] == word[2]
+                and word[1] == word[4]
+                and is_consonant(word[0])
+                and is_vowel(word[1])
             ):
-                stem = token[2:]
-                stem.rep = str(token[:2])
+                stems.append(token.copy_with(word=word[2:], rep=word[:2]))
 
-            # Repeats all consonants (CC-CCV) (e.g. chcheck => check)
+            # CC-CCV (e.g. chcheck => check)
             elif (
-                token[0:2] == token[2:4]
-                and is_consonant(token[0:2])
-                and is_vowel(token[4])
+                word[0:2] == word[2:4] and is_consonant(word[0:2]) and is_vowel(word[4])
             ):
-                stem = token[2:]
-                stem.rep = str(token[:2])
+                stems.append(token.copy_with(word=word[2:], rep=word[:2]))
 
-            # Repeats all consonants and vowel (CCV-CCV) (e.g. checheck => check)
+            # CCV-CCV (e.g. checheck => check)
             elif (
-                token[0:2] == token[3:5]
-                and is_consonant(token[0:2])
-                and is_vowel(token[2])
+                word[0:2] == word[3:5] and is_consonant(word[0:2]) and is_vowel(word[2])
             ):
-                stem = token[3:]
-                stem.rep = str(token[:3])
-
-        # # Starts with a 3-consonant cluster
-        # if len(token) > 6:
-        #     # Repeats first consonant and vowel (CV-CCCV) (e.g. sisplit => split)
-        #     if (
-        #         token[0] == token[2]
-        #         and token[1] == token[5]
-        #         and is_consonant(token[0])
-        #         and is_vowel(token[1])
-        #     ):
-        #         stem = token[2:]
-        #         stem.rep = str(token[:2])
-
-        #     # Repeats first two consonants (CC-CCCV) (e.g. spsplit => split)
-        #     elif (
-        #         token[0:2] == token[2:4]
-        #         and is_consonant(token[0:2])
-        #         and is_vowel(token[5])
-        #     ):
-        #         stem = token[2:]
-        #         stem.rep = str(token[:2])
-
-        #     # Repeats first two consonants and vowel (CCV-CCCV) (e.g. spisplit => split)
-        #     elif (
-        #         token[0:2] == token[3:5]
-        #         and token[2] == token[6]
-        #         and is_consonant(token[0:2])
-        #         and is_vowel(token[6])
-        #     ):
-        #         stem = token[3:]
-        #         stem.rep = str(token[:3])
-
-        #     # Repeats all consonants (CCC-CCCV) (e.g. splsplit => split)
-        #     elif (
-        #         token[0:3] == token[3:6]
-        #         and is_consonant(token[0:3])
-        #         and is_vowel(token[6])
-        #     ):
-        #         stem = token[3:]
-        #         stem.rep = str(token[:3])
-
-        #     # Repeats all consonants and vowel (CCCV-CCCV) (e.g. splisplit => split)
-        #     elif (
-        #         token[0:4] == token[4:8]
-        #         and is_consonant(token[0:3])
-        #         and is_vowel(token[3])
-        #     ):
-        #         stem = token[4:]
-        #         stem.rep = str(token[:4])
-
-        if stem:
-            stems.add(stem)
+                stems.append(token.copy_with(word=word[3:], rep=word[:3]))
 
     return stems
 
 
-def stem_dup(tokens: set[Stem]) -> set[Stem]:
-    """Stems tokens with full reduplication (simply referred as duplication).
-
-    Args:
-        tokens (set[Stem]): A set of words to be stemmed.
-
-    Returns:
-        set[Stem]: A set of stemming attempts for each token, empty otherwise.
-    """
-    stems = set()
-
+def stem_dup(tokens: list[Stem]) -> list[Stem]:
+    stems = []
     for token in tokens:
-        # check if token has exactly one hyphen
-        arr = token.split("-")
+        arr = token.word.split("-")
         if len(arr) != 2:
             continue
 
         first, second = arr
-        first_len = len(first)
-        second_len = len(second)
+        first_len, second_len = len(first), len(second)
         if first_len <= 1 or second_len <= 1 or first_len < second_len:
             continue
 
@@ -607,58 +408,25 @@ def stem_dup(tokens: set[Stem]) -> set[Stem]:
         if len_diff > 2:
             continue
 
-        # 2-char contraction
-        contraction = None
-        LEN2_CONTRACTIONS = ("ng", "'t")
-        if len_diff == 2:
-            end = first[-2:]
-            if end not in LEN2_CONTRACTIONS:
-                continue
+        contraction = ""
+        if len_diff == 2 and first[-2:] in ("ng", "'t"):
+            contraction, first = first[-2:], first[:-2]
+        elif len_diff == 1 and first[-1] == "t":
+            contraction, first = "'t", first[:-1]
 
-            first = first[:-2]
-            contraction = end
-
-        # 1-char contraction
-        LEN1_CONTRACTION = "t"
-        if len_diff == 1:
-            end = first[-1]
-            if end != LEN1_CONTRACTION:
-                continue
-
-            first = first[:-1]
-            contraction = "'t"
-
-        # phoneme change (o/u) (e.g. anu-ano => ano)
-        phoneme_change = None
+        phoneme_change = token.phoneme_change
         if first[-1] == "u" and second[-1] == "o":
             first = first[:-1] + "o"
             phoneme_change = "dup: o/u"
 
-        # Exact match (e.g. ano-ano => ano)
-        if first != second:
-            continue
-
-        stem = first
-        stem.dup = first
-        stem.contraction = contraction
-        stem.phoneme_change = phoneme_change
-        stems.add(stem)
+        if first == second:
+            stems.append(
+                token.copy_with(
+                    word=first,
+                    dup=first,
+                    contraction=contraction,
+                    phoneme_change=phoneme_change,
+                )
+            )
 
     return stems
-
-
-if __name__ == "__main__":
-    text = input("\ntext: ")
-    print()
-
-    stems = get_stems(text)
-    print("stems:", stems)
-    print()
-
-    for token in _split_to_words(text):
-        candidates = get_stem_candidates(token)
-        if candidates:
-            table = [{"stem": c, **c.__dict__} for c in candidates]
-            print(token)
-            print(tabulate(table, headers="keys"))
-            print()
