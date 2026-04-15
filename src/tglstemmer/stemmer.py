@@ -41,6 +41,9 @@ def get_stem(token_str: str) -> Stem:
     cleaned_word = token_str.strip().lower()
     token = Stem(cleaned_word)
 
+    if len(token.word) <= 3:
+        return token
+
     candidates = get_stem_candidates(cleaned_word)
     if not candidates:
         return token
